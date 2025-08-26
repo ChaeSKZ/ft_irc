@@ -173,9 +173,21 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 
 		if (client.isReady())
 		{
-			std::string welcome =
-				":ircserv 001 " + client.getNickname() + " :Welcome to ft_irc, " + client.getNickname() + "\r\n";
-			send(fd, welcome.c_str(), welcome.size(), 0);
+			std::string nick = client.getNickname();
+			std::string rpl001 = ":ircserv 001 " + nick + " :Welcome to ft_irc, " + nick + "\r\n";
+			std::string rpl002 = ":ircserv 002 " + nick + " :Your host is ircserv, running version 1.0\r\n";
+			std::string rpl003 = ":ircserv 003 " + nick + " :This server was created just now\r\n";
+			std::string rpl004 = ":ircserv 004 " + nick + " ircserv 1.0 o o\r\n";
+			std::string rpl375 = ":ircserv 375 " + nick + " :- ircserv Message of the Day -\r\n";
+			std::string rpl372 = ":ircserv 372 " + nick + " :- Welcome to ft_irc!\r\n";
+			std::string rpl376 = ":ircserv 376 " + nick + " :End of /MOTD command.\r\n";
+			send(fd, rpl001.c_str(), rpl001.size(), 0);
+			send(fd, rpl002.c_str(), rpl002.size(), 0);
+			send(fd, rpl003.c_str(), rpl003.size(), 0);
+			send(fd, rpl004.c_str(), rpl004.size(), 0);
+			send(fd, rpl375.c_str(), rpl375.size(), 0);
+			send(fd, rpl372.c_str(), rpl372.size(), 0);
+			send(fd, rpl376.c_str(), rpl376.size(), 0);
 			client.authenticate();
 		}
 	}
