@@ -20,6 +20,26 @@ Server::~Server()
 	close(_serverSocket);
 }
 
+void Server::setCapEnd(bool value)
+{
+	CapEnd = value;
+}
+
+void Server::setSentWelcome(bool value)
+{
+	SentWelcome = value;
+}
+
+bool Server::getCapEnd() const
+{
+	return CapEnd;
+}
+
+bool Server::getSentWelcome() const
+{
+	return SentWelcome;
+}
+
 void Server::initSocket()
 {
 	_serverSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -116,7 +136,6 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 	{
 		if (!line.empty() && line[line.size()-1] == '\r')
 			line.erase(line.size()-1);
-
 		if (line.find("PASS ") == 0)
 		{
 			std::string pass = line.substr(5);
@@ -131,25 +150,21 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 			else
 				client.setPasswordAccepted(true);
 		}
-		else if (line.find("NICK ") == 0)
-		{
+		else if (line.find("NICK ") == 0 )
 			client.setNickname(line.substr(5));
-		}
 		else if (line.find("USER ") == 0)
-		{
 			client.setUsername(line.substr(5));
-		}
-		else if (line.find("PING ") == 0)
+		else if (line.find("PING ") == 0 && client.isReady())
 		{
 			std::string pong = "PONG " + line.substr(5) + "\r\n";
 			send(fd, pong.c_str(), pong.size(), 0);
 		}
-		else if (line.find("JOIN ") == 0)
+		else if (line.find("JOIN ") == 0 && client.isReady())
 		{
 			std::string chan = line.substr(5);
 			cmdJoin(fd, chan);
 		}
-		else if (line.find("PRIVMSG ") == 0)
+		else if (line.find("PRIVMSG ") == 0 && client.isReady())
 		{
 			size_t pos = line.find(" :");
 			if (pos != std::string::npos)
@@ -159,7 +174,7 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 				cmdPrivmsg(fd, target, message);
 			}
 		}
-		else if (line.find("QUIT") == 0)
+		else if (line.find("QUIT") == 0 && client.isReady())
 		{
 			std::string reason;
 			size_t pos = line.find(" :");
@@ -170,24 +185,28 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 			cmdQuit(fd, reason);
 			return;
 		}
-
-		if (client.isReady())
+		else if (line.find("CAP LS") == 0)
 		{
-			std::string nick = client.getNickname();
-			std::string rpl001 = ":ircserv 001 " + nick + " :Welcome to ft_irc, " + nick + "\r\n";
-			std::string rpl002 = ":ircserv 002 " + nick + " :Your host is ircserv, running version 1.0\r\n";
-			std::string rpl003 = ":ircserv 003 " + nick + " :This server was created just now\r\n";
-			std::string rpl004 = ":ircserv 004 " + nick + " ircserv 1.0 o o\r\n";
-			std::string rpl375 = ":ircserv 375 " + nick + " :- ircserv Message of the Day -\r\n";
-			std::string rpl372 = ":ircserv 372 " + nick + " :- Welcome to ft_irc!\r\n";
-			std::string rpl376 = ":ircserv 376 " + nick + " :End of /MOTD command.\r\n";
-			send(fd, rpl001.c_str(), rpl001.size(), 0);
-			send(fd, rpl002.c_str(), rpl002.size(), 0);
-			send(fd, rpl003.c_str(), rpl003.size(), 0);
-			send(fd, rpl004.c_str(), rpl004.size(), 0);
-			send(fd, rpl375.c_str(), rpl375.size(), 0);
-			send(fd, rpl372.c_str(), rpl372.size(), 0);
-			send(fd, rpl376.c_str(), rpl376.size(), 0);
+			std::string capls = "CAP * LS :\r\n";
+			send(fd, capls.c_str(), capls.size(), 0);
+		}
+		else if (line.find("CAP END") == 0)
+			setCapEnd(true);
+		if (client.isReady() && getCapEnd() && !getSentWelcome())
+		{
+			std::string welcome =
+			":ircserv 001 " + client.getNickname() + " :Welcome to ft_irc, " + client.getNickname() + "\r\n";
+			send(fd, welcome.c_str(), welcome.size(), 0);
+			std::string host = ":ircserv 002 " + client.getNickname() + " :Your host is ircserv, running version 1.0\r\n";
+			send(fd, host.c_str(), host.size(), 0);
+			std::string created = ":ircserv 003 " + client.getNickname() + " :This server was created just now\r\n";
+			send(fd, created.c_str(), created.size(), 0);
+			std::string motd_start = ":ircserv 375 " + client.getNickname() + " :- ircserv Message of the Day -\r\n";
+			send(fd, motd_start.c_str(), motd_start.size(), 0);
+			std::string motd_line = ":ircserv 372 " + client.getNickname() + " :- Welcome to ft_irc!\r\n";
+			send(fd, motd_line.c_str(), motd_line.size(), 0);
+			std::string motd_end = ":ircserv 376 " + client.getNickname() + " :End of /MOTD command.\r\n";
+			send(fd, motd_end.c_str(), motd_end.size(), 0);
 			client.authenticate();
 		}
 	}

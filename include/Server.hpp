@@ -11,6 +11,8 @@ class Server
 {
 private:
 	int _port;
+	bool CapEnd;
+	bool SentWelcome;
 	std::string _password;
 	int _serverSocket;
 	std::map<int, Client> _clients;
@@ -22,6 +24,10 @@ public:
 
 	void run();
 	void handleClientMessage(int fd, const std::string &msg);
+	void setCapEnd(bool value);
+	void setSentWelcome(bool value);
+	bool getCapEnd() const;
+	bool getSentWelcome() const;
 
 private:
 	void initSocket();
