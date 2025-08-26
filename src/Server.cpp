@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <cstring>
+#include <stdio.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <poll.h>
@@ -85,7 +86,6 @@ void Server::run()
 			{
 				if (fds[i].fd == _serverSocket)
 				{
-					// Nouvelle connexion
 					int clientFd = accept(_serverSocket, NULL, NULL);
 					if (clientFd >= 0)
 					{
@@ -93,17 +93,20 @@ void Server::run()
 						clientPoll.fd = clientFd;
 						clientPoll.events = POLLIN;
 						fds.push_back(clientPoll);
-
 						_clients[clientFd] = Client(clientFd);
+
+						struct sockaddr_in addr;
+						socklen_t len = sizeof(addr);
+						getpeername(clientFd, (struct sockaddr*)&addr, &len);
+						std::string ip = inet_ntoa(addr.sin_addr);
+						_clients[clientFd].setHostname(ip);
 						std::cout << "New client connected (fd=" << clientFd << ")" << std::endl;
 					}
 				}
 				else
 				{
-					// Message d'un client existant
 					char buffer[BUFFER_SIZE];
 					int bytes = recv(fds[i].fd, buffer, BUFFER_SIZE - 1, 0);
-
 					if (bytes <= 0)
 					{
 						std::cout << "Client disconnected (fd=" << fds[i].fd << ")" << std::endl;
@@ -153,18 +156,30 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 		else if (line.find("NICK ") == 0 )
 			client.setNickname(line.substr(5));
 		else if (line.find("USER ") == 0)
-			client.setUsername(line.substr(5));
-		else if (line.find("PING ") == 0 && client.isReady())
+		{
+			std::istringstream iss(line.substr(5));
+			std::string username, hostname, servername, realname;
+			iss >> username >> hostname >> servername;
+			std::getline(iss, realname);
+			if (!realname.empty() && realname[0] == ' ')
+				realname = realname.substr(1);
+			if (!realname.empty() && realname[0] == ':')
+				realname = realname.substr(1);
+			client.setUsername(username);
+			client.setServername(servername);
+			client.setRealname(realname);
+		}
+		else if (line.find("PING ") == 0 && getSentWelcome())
 		{
 			std::string pong = "PONG " + line.substr(5) + "\r\n";
 			send(fd, pong.c_str(), pong.size(), 0);
 		}
-		else if (line.find("JOIN ") == 0 && client.isReady())
+		else if (line.find("JOIN ") == 0 && getSentWelcome())
 		{
 			std::string chan = line.substr(5);
 			cmdJoin(fd, chan);
 		}
-		else if (line.find("PRIVMSG ") == 0 && client.isReady())
+		else if (line.find("PRIVMSG ") == 0 && getSentWelcome())
 		{
 			size_t pos = line.find(" :");
 			if (pos != std::string::npos)
@@ -174,7 +189,7 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 				cmdPrivmsg(fd, target, message);
 			}
 		}
-		else if (line.find("QUIT") == 0 && client.isReady())
+		else if (line.find("QUIT") == 0 && getSentWelcome())
 		{
 			std::string reason;
 			size_t pos = line.find(" :");
@@ -197,7 +212,7 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 			std::string welcome =
 			":ircserv 001 " + client.getNickname() + " :Welcome to ft_irc, " + client.getNickname() + "\r\n";
 			send(fd, welcome.c_str(), welcome.size(), 0);
-			std::string host = ":ircserv 002 " + client.getNickname() + " :Your host is ircserv, running version 1.0\r\n";
+			std::string host = ":ircserv 002 " + client.getNickname() + " :Your host is " + client.getHostname() + ", running version 1.0\r\n";
 			send(fd, host.c_str(), host.size(), 0);
 			std::string created = ":ircserv 003 " + client.getNickname() + " :This server was created just now\r\n";
 			send(fd, created.c_str(), created.size(), 0);
@@ -217,7 +232,10 @@ void Server::cmdJoin(int fd, const std::string &channel)
 	Client &client = _clients[fd];
 	_channels[channel].insert(fd);
 
-	std::string joinMsg = ":" + client.getNickname() + " JOIN " + channel + "\r\n";
+	std::string joinMsg = ":" + client.getNickname() + "!" + client.getUsername() + "@" + client.getHostname() + " JOIN :" + channel + "\r\n";
+	for (std::set<int>::iterator it = _channels[channel].begin(); it != _channels[channel].end(); ++it)
+		std::cout << *it << " ";
+	std::cout << std::endl;
 	for (std::set<int>::iterator it = _channels[channel].begin(); it != _channels[channel].end(); ++it)
 	{
 		send(*it, joinMsg.c_str(), joinMsg.size(), 0);
@@ -227,14 +245,20 @@ void Server::cmdJoin(int fd, const std::string &channel)
 void Server::cmdPrivmsg(int fd, const std::string &target, const std::string &message)
 {
 	Client &client = _clients[fd];
-	std::string msg = ":" + client.getNickname() + " PRIVMSG " + target + " :" + message + "\r\n";
+	std::string msg = ":" + client.getNickname() + "!" + client.getUsername() + "@" + client.getHostname() + " PRIVMSG " + target + " :" + message + "\r\n";
 
 	if (_channels.find(target) != _channels.end())
 	{
 		for (std::set<int>::iterator it = _channels[target].begin(); it != _channels[target].end(); ++it)
 		{
 			if (*it != fd)
-				send(*it, msg.c_str(), msg.size(), 0);
+			{
+				int ret = send(*it, msg.c_str(), msg.size(), 0);
+				if (ret == -1)
+					perror("send failed");
+				else
+					std::cout << "Sent: " << msg;
+			}
 		}
 	}
 	else
@@ -243,7 +267,11 @@ void Server::cmdPrivmsg(int fd, const std::string &target, const std::string &me
 		{
 			if (it->second.getNickname() == target)
 			{
-				send(it->first, msg.c_str(), msg.size(), 0);
+				int ret = send(it->first, msg.c_str(), msg.size(), 0);
+				if (ret == -1)
+					perror("send failed");
+				else
+					std::cout << "Sent: " << msg;
 				return;
 			}
 		}

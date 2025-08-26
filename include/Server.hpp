@@ -32,7 +32,6 @@ public:
 private:
 	void initSocket();
 
-	// Commandes IRC
 	void cmdJoin(int fd, const std::string &channel);
 	void cmdPrivmsg(int fd, const std::string &target, const std::string &message);
 	void cmdQuit(int fd, const std::string &reason);
