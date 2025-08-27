@@ -253,7 +253,7 @@ void Server::cmdPrivmsg(int fd, const std::string &target, const std::string &me
 		{
 			if (*it != fd)
 			{
-				int ret = send(*it, msg.c_str(), msg.size(), 0);
+				long unsigned int ret = send(*it, msg.c_str(), msg.size(), 0);
 				if (ret < msg.size())
 					perror("send failed");
 				else
