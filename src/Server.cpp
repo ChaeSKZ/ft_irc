@@ -169,17 +169,17 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 			client.setServername(servername);
 			client.setRealname(realname);
 		}
-		else if (line.find("PING ") == 0 && getSentWelcome())
+		else if (line.find("PING ") == 0 && getCapEnd())
 		{
 			std::string pong = "PONG " + line.substr(5) + "\r\n";
 			send(fd, pong.c_str(), pong.size(), 0);
 		}
-		else if (line.find("JOIN ") == 0 && getSentWelcome())
+		else if (line.find("JOIN ") == 0 && getCapEnd())
 		{
 			std::string chan = line.substr(5);
 			cmdJoin(fd, chan);
 		}
-		else if (line.find("PRIVMSG ") == 0 && getSentWelcome())
+		else if (line.find("PRIVMSG ") == 0 && getCapEnd())
 		{
 			size_t pos = line.find(" :");
 			if (pos != std::string::npos)
@@ -189,7 +189,7 @@ void Server::handleClientMessage(int fd, const std::string &msg)
 				cmdPrivmsg(fd, target, message);
 			}
 		}
-		else if (line.find("QUIT") == 0 && getSentWelcome())
+		else if (line.find("QUIT") == 0 && getCapEnd())
 		{
 			std::string reason;
 			size_t pos = line.find(" :");
@@ -254,7 +254,7 @@ void Server::cmdPrivmsg(int fd, const std::string &target, const std::string &me
 			if (*it != fd)
 			{
 				int ret = send(*it, msg.c_str(), msg.size(), 0);
-				if (ret == -1)
+				if (ret < msg.size())
 					perror("send failed");
 				else
 					std::cout << "Sent: " << msg;

@@ -16,7 +16,7 @@ private:
 	std::string _password;
 	int _serverSocket;
 	std::map<int, Client> _clients;
-	std::map<std::string, std::set<int> > _channels; // channel -> liste des fds
+	std::map<std::string, std::set<int> > _channels;
 
 public:
 	Server(int port, const std::string &password);
